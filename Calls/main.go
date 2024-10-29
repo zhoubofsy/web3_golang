@@ -1,61 +1,91 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"flag"
 	"log"
-	"math/big"
-	"strings"
+	"os"
 
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
+	eth "web3/Calls/ethcallers"
 )
 
 const (
 	avalancheFujiURL   = "https://api.avax-test.network/ext/bc/C/rpc" // Avalanche Fuji节点
-	contractAddressHex = "0xYourContractAddress"                      // 部署的合约地址
+	contractAddressHex = "0x8Bf0438A0c1D77412F33459C27a2aB2F935931bC" // 部署的合约地址
 )
 
+// main()
 func main() {
-	// 连接到Avalanche Fuji网络
-	client, err := ethclient.Dial(avalancheFujiURL)
+	var privateKey string
+	flag.StringVar(&privateKey, "privateKey", "private.pem", "Private key for the sender account")
+	flag.Parse()
+
+	privKey, _ := os.ReadFile(privateKey)
+
+	ethcaller, err := eth.NewEthCaller(avalancheFujiURL, contractAddressHex)
 	if err != nil {
-		log.Fatalf("Failed to connect to the Avalanche client: %v", err)
+		log.Fatalf("Failed to create EthCaller: %v", err)
 	}
+	defer ethcaller.Close()
 
-	// 合约ABI（根据您的合约生成的ABI）
-	contractABI := `[{"constant":true,"inputs":[],"name":"yourMethodName","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"}]`
-	parsedABI, err := abi.JSON(strings.NewReader(contractABI))
-	if err != nil {
-		log.Fatalf("Failed to parse contract ABI: %v", err)
-	}
+	// totalSupplyCaller := eth.NewTotalSupplyCaller(ethcaller)
+	// ethcaller.View(totalSupplyCaller)
 
-	// 合约地址
-	contractAddress := common.HexToAddress(contractAddressHex)
+	// nameCaller := eth.NewNameCaller(ethcaller)
+	// ethcaller.View(nameCaller)
 
-	// 调用合约方法
-	var result *big.Int
-	callData, err := parsedABI.Pack("yourMethodName") // 替换为您的方法名
-	if err != nil {
-		log.Fatalf("Failed to pack data for contract call: %v", err)
-	}
+	// balanceofCaller := eth.NewBalanceofCaller(ethcaller, "0xff10a3a7cb9007abb4e1a61f2680572d5fe5d489")
+	// ethcaller.View(balanceofCaller)
 
-	msg := ethereum.CallMsg{
-		To:   &contractAddress,
-		Data: callData,
-	}
+	// allowance := eth.NewAllowance(ethcaller, "0xddef358f8a1d3e2d6d986ba358af4c6e435b921b", "0xf01b149542d1284d138d1bf7e59a252f47db3cc2")
+	// ethcaller.View(allowance)
 
-	response, err := client.CallContract(context.Background(), msg, nil)
-	if err != nil {
-		log.Fatalf("Failed to call contract: %v", err)
-	}
+	approval := eth.NewApproval(ethcaller, "0xf01b149542d1284d138d1bf7e59a252f47db3cc2", 1000000000000000000)
+	ethcaller.Trans(approval, string(privKey))
 
-	err = parsedABI.UnpackIntoInterface(&result, "yourMethodName", response)
-	if err != nil {
-		log.Fatalf("Failed to unpack contract response: %v", err)
-	}
-
-	fmt.Printf("Result: %s\n", result.String())
 }
+
+// func main() {
+// 	// 连接到Avalanche Fuji网络
+// 	client, err := ethclient.Dial(avalancheFujiURL)
+// 	if err != nil {
+// 		log.Fatalf("Failed to connect to the Avalanche client: %v", err)
+// 	}
+
+// 	// 合约ABI（根据您的合约生成的ABI）
+// 	abiByte, err := os.ReadFile("./abi.json")
+// 	if err != nil {
+// 		log.Fatalf("os.ReadFile error , %v", err)
+// 	}
+// 	contractABI := string(abiByte)
+// 	parsedABI, err := abi.JSON(strings.NewReader(contractABI))
+// 	if err != nil {
+// 		log.Fatalf("Failed to parse contract ABI: %v", err)
+// 	}
+
+// 	// 合约地址
+// 	contractAddress := common.HexToAddress(contractAddressHex)
+
+// 	// 调用合约方法
+// 	var result *big.Int
+// 	callData, err := parsedABI.Pack("totalSupply") // 替换为您的方法名
+// 	if err != nil {
+// 		log.Fatalf("Failed to pack data for contract call: %v", err)
+// 	}
+
+// 	msg := ethereum.CallMsg{
+// 		To:   &contractAddress,
+// 		Data: callData,
+// 	}
+
+// 	response, err := client.CallContract(context.Background(), msg, nil)
+// 	if err != nil {
+// 		log.Fatalf("Failed to call contract: %v", err)
+// 	}
+
+// 	err = parsedABI.UnpackIntoInterface(&result, "totalSupply", response)
+// 	if err != nil {
+// 		log.Fatalf("Failed to unpack contract response: %v", err)
+// 	}
+
+// 	fmt.Printf("Result: %s\n", result.String())
+// }
