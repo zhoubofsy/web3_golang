@@ -48,8 +48,7 @@ type EthViewInterface interface {
 }
 
 type EthTransInterface interface {
-	EthViewInterface
-	GetPrivateKey() string
+	MakeCallData() ([]byte, error)
 }
 
 func (e *EthCaller) View(ei EthViewInterface) error {
@@ -83,6 +82,79 @@ func (e *EthCaller) Close() {
 }
 
 func (e *EthCaller) Trans(ei EthTransInterface, privateKeyHex string) error {
+	//hash, err := e.ClassicTrans(ei, privateKeyHex)
+	hash, err := e.NewTrans(ei, privateKeyHex)
+	if err != nil {
+		return err
+	}
+	return e.WaitForConfirm(hash)
+}
+
+func (e *EthCaller) NewTrans(ei EthTransInterface, privateKeyHex string) (common.Hash, error) {
+	// 加载私钥
+	privateKey, err := crypto.HexToECDSA(privateKeyHex[2:]) // 去掉开头的0x
+	if err != nil {
+		log.Fatalf("Failed to load private key: %v", err)
+	}
+
+	// 获取公钥和地址
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatalf("Failed to assert public key")
+	}
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	// 构造交易
+	nonce, err := e.client.PendingNonceAt(context.Background(), fromAddress)
+	if err != nil {
+		log.Fatalf("Failed to get nonce: %v", err)
+	}
+
+	// 签署交易
+	chainId, err := e.client.ChainID(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to get chain ID: %v", err)
+	}
+
+	header, err := e.client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		log.Fatalf("Failed to get header: %v", err)
+	}
+	gasTipCap, err := e.client.SuggestGasTipCap(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to suggest gas tip cap: %v", err)
+	}
+
+	data, err := ei.MakeCallData()
+	if err != nil {
+		log.Fatalf("Failed to make call data for contract call: %v", err)
+	}
+	tx := &types.DynamicFeeTx{
+		ChainID:   chainId,
+		Nonce:     nonce,
+		To:        &e.addr,
+		Value:     big.NewInt(0),
+		Gas:       30000,
+		GasFeeCap: header.BaseFee,
+		GasTipCap: gasTipCap,
+		Data:      data,
+	}
+
+	signedTX, err := types.SignNewTx(privateKey, types.LatestSignerForChainID(chainId), tx)
+	if err != nil {
+		log.Fatalf("Failed to sign transaction: %v", err)
+	}
+
+	err = e.client.SendTransaction(context.Background(), signedTX)
+	if err != nil {
+		log.Fatalf("Failed to send transaction: %v", err)
+	}
+	log.Printf("Transaction sent: %s", signedTX.Hash().Hex())
+	return signedTX.Hash(), err
+}
+
+func (e *EthCaller) ClassicTrans(ei EthTransInterface, privateKeyHex string) (common.Hash, error) {
 	// 加载私钥
 	privateKey, err := crypto.HexToECDSA(privateKeyHex[2:]) // 去掉开头的0x
 	if err != nil {
@@ -115,7 +187,7 @@ func (e *EthCaller) Trans(ei EthTransInterface, privateKeyHex string) error {
 	}
 
 	// 构建交易
-	gasLimit := uint64(300000) // 如何才能获取一个合理的Gas Limit ？
+	gasLimit := uint64(30000) // 如何才能获取一个合理的Gas Limit ？
 	tx := types.NewTransaction(nonce, e.addr, big.NewInt(0), gasLimit, gasPrice, data)
 
 	// 签署交易
@@ -135,6 +207,18 @@ func (e *EthCaller) Trans(ei EthTransInterface, privateKeyHex string) error {
 		log.Fatalf("Failed to send transaction: %v", err)
 	}
 
+	// 打印交易哈希
 	fmt.Printf("Transaction sent: %s\n", signedTx.Hash().Hex())
-	return err
+	return signedTx.Hash(), err
+}
+
+func (e *EthCaller) WaitForConfirm(txHash common.Hash) error {
+	receipt, err := e.client.TransactionReceipt(context.Background(), txHash)
+	if err != nil {
+		log.Fatalf("Failed to get transaction receipt: %v", err)
+	}
+	if receipt.Status == types.ReceiptStatusFailed {
+		return fmt.Errorf("transaction reverted , hash: %s", receipt.TxHash.Hex())
+	}
+	return nil
 }

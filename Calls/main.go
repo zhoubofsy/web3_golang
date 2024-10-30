@@ -39,7 +39,7 @@ func main() {
 	// allowance := eth.NewAllowance(ethcaller, "0xddef358f8a1d3e2d6d986ba358af4c6e435b921b", "0xf01b149542d1284d138d1bf7e59a252f47db3cc2")
 	// ethcaller.View(allowance)
 
-	approval := eth.NewApproval(ethcaller, "0xf01b149542d1284d138d1bf7e59a252f47db3cc2", 1000000000000000000)
+	approval := eth.NewApproval(ethcaller, "0xf01b149542d1284d138d1bf7e59a252f47db3cc2", 1100000000000000000)
 	ethcaller.Trans(approval, string(privKey))
 
 }
