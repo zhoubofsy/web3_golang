@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -21,6 +22,7 @@ type EthCaller struct {
 	client *ethclient.Client
 	pABI   *abi.ABI
 	addr   common.Address
+	ctx    context.Context
 }
 
 func NewEthCaller(url string, contract string) (*EthCaller, error) {
@@ -39,6 +41,7 @@ func NewEthCaller(url string, contract string) (*EthCaller, error) {
 		client: client,
 		pABI:   &pABI,
 		addr:   common.HexToAddress(contract),
+		ctx:    context.Background(),
 	}, err
 }
 
@@ -90,6 +93,7 @@ func (e *EthCaller) Trans(ei EthTransInterface, privateKeyHex string) error {
 	return e.WaitForConfirm(hash)
 }
 
+// Help from : https://medium.com/@alexanderxing/go-%E7%A1%AE%E8%AE%A4%E4%BB%A5%E5%A4%AA%E5%9D%8A%E4%BA%A4%E6%98%93-2b1e513b3b81
 func (e *EthCaller) NewTrans(ei EthTransInterface, privateKeyHex string) (common.Hash, error) {
 	// 加载私钥
 	privateKey, err := crypto.HexToECDSA(privateKeyHex[2:]) // 去掉开头的0x
@@ -98,33 +102,34 @@ func (e *EthCaller) NewTrans(ei EthTransInterface, privateKeyHex string) (common
 	}
 
 	// 获取公钥和地址
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		log.Fatalf("Failed to assert public key")
-	}
-	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	fromAddress := crypto.PubkeyToAddress(privateKey.PublicKey)
 
-	// 构造交易
+	// 获取指定地址在特定区块（由第三个参数指定）上的交易计数。如果第三个参数为nil，则默认为最新的区块。
+	//nonce, err := e.client.NonceAt(context.Background(), fromAddress, nil)
+
+	// 获取指定地址在待处理的交易（即还未被打包进区块的交易）上的交易计数。
+	// 这个方法通常用于构造新的交易，因为新的交易需要使用最新的交易计数。
 	nonce, err := e.client.PendingNonceAt(context.Background(), fromAddress)
 	if err != nil {
 		log.Fatalf("Failed to get nonce: %v", err)
 	}
 
-	// 签署交易
+	// 获取当前以太坊网络的链ID
 	chainId, err := e.client.ChainID(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to get chain ID: %v", err)
 	}
-
+	// 获取指定区块号的区块头。区块头包含了关于区块的一些基本信息，比如区块号、时间戳、难度等。
 	header, err := e.client.HeaderByNumber(context.Background(), nil)
 	if err != nil {
 		log.Fatalf("Failed to get header: %v", err)
 	}
-	gasTipCap, err := e.client.SuggestGasTipCap(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to suggest gas tip cap: %v", err)
-	}
+	//获取当前网络的建议的gas tip（小费）。gas tip 是发送交易时支付给矿工的小费，矿工会优先打包gas tip高的交易。
+	gasTipCap := big.NewInt(0)
+	// gasTipCap, err := e.client.SuggestGasTipCap(context.Background())
+	// if err != nil {
+	// 	log.Fatalf("Failed to suggest gas tip cap: %v", err)
+	// }
 
 	data, err := ei.MakeCallData()
 	if err != nil {
@@ -213,6 +218,20 @@ func (e *EthCaller) ClassicTrans(ei EthTransInterface, privateKeyHex string) (co
 }
 
 func (e *EthCaller) WaitForConfirm(txHash common.Hash) error {
+	pending := true
+	for pending {
+		select {
+		case <-e.ctx.Done():
+			return e.ctx.Err()
+		case <-time.After(10 * time.Second):
+			return fmt.Errorf("timeout waiting for transaction confirmation")
+		default:
+			_, isPending, err := e.client.TransactionByHash(context.Background(), txHash)
+			if !isPending && err == nil {
+				pending = false
+			}
+		}
+	}
 	receipt, err := e.client.TransactionReceipt(context.Background(), txHash)
 	if err != nil {
 		log.Fatalf("Failed to get transaction receipt: %v", err)
