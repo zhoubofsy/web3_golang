@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/big"
 	"net/http"
+	"strconv"
 
 	"web3/gin/account"
 	"web3/gin/block"
@@ -33,6 +34,8 @@ func main() {
 
 	// Transaction routes
 	r.GET("/transactions", listTransactions)
+	r.POST("/transfer", transfer)
+	//r.POST("/erctransfer", ercTransfer)
 	r.GET("/transactions/:id", getTransaction)
 	r.GET("/transactions/count", getTransactionCount)
 
@@ -166,6 +169,27 @@ func listTransactions(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"transactions": txInfos})
 }
+
+func transfer(c *gin.Context) {
+	txTo := c.Request.Header.Get("TxTo")
+	val, err := strconv.Atoi(c.Request.Header.Get("Value"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid value"})
+		return
+	}
+	op := trans.NewOpTrans(Client)
+	tx, err := op.Transfer(txTo, uint64(val))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"Transfer": err.Error()})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"Transfer": "success!", "txHash": tx})
+	}
+}
+
+// func ercTransfer(c *gin.Context) {
+// 	// ...existing code...
+// 	c.JSON(http.StatusOK, gin.H{"ERCTransfer": "success!", "txHash": "0x123456"})
+// }
 
 func getTransaction(c *gin.Context) {
 	// ...existing code...
