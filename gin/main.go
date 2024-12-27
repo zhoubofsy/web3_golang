@@ -113,7 +113,6 @@ func getAccountBalance(c *gin.Context) {
 	if val == "1" {
 		balance, err = op.GetPendingBalance(accountID)
 	} else {
-		// 假设我们有一个函数 getBalance(accountID string, blkNum *big.Int) (string, error) 来获取余额
 		balance, err = op.GetBalance(accountID, nil)
 	}
 	if err != nil {
@@ -241,10 +240,4 @@ func getEvent(c *gin.Context) {
 func listenEvents(c *gin.Context) {
 	// ...existing code...
 	c.JSON(http.StatusOK, gin.H{"message": "Listening to events"})
-}
-
-// 假设这是一个获取余额的函数
-func getBalance(accountID string) (string, error) {
-	// 这里应该实现实际的获取余额逻辑
-	return "1000", nil
 }
