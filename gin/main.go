@@ -9,6 +9,7 @@ import (
 	"web3/gin/account"
 	"web3/gin/block"
 	"web3/gin/blockchain"
+	"web3/gin/contract"
 	trans "web3/gin/transaction"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +36,6 @@ func main() {
 	// Transaction routes
 	r.GET("/transactions", listTransactions)
 	r.POST("/transfer", transfer)
-	//r.POST("/erctransfer", ercTransfer)
 	r.GET("/transactions/:id", getTransaction)
 	r.GET("/transactions/count", getTransactionCount)
 
@@ -186,11 +186,6 @@ func transfer(c *gin.Context) {
 	}
 }
 
-// func ercTransfer(c *gin.Context) {
-// 	// ...existing code...
-// 	c.JSON(http.StatusOK, gin.H{"ERCTransfer": "success!", "txHash": "0x123456"})
-// }
-
 func getTransaction(c *gin.Context) {
 	// ...existing code...
 	c.JSON(http.StatusOK, gin.H{"transaction": "transaction details"})
@@ -208,8 +203,13 @@ func getTransactionCount(c *gin.Context) {
 
 // Contract handlers
 func deployContract(c *gin.Context) {
-	// ...existing code...
-	c.JSON(http.StatusOK, gin.H{"message": "Contract deployed"})
+	op := contract.NewContract(Client)
+	addr, tx, err := op.DeployContract()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Contract deployed", "address": addr, "txHash": tx})
 }
 
 func callContract(c *gin.Context) {
