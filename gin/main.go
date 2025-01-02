@@ -41,7 +41,7 @@ func main() {
 
 	// Contract routes
 	r.POST("/contracts", deployContract)
-	r.POST("/contracts/:id/call", callContract)
+	r.POST("/contracts/:id/:method", callContract)
 	r.GET("/contracts", listContracts)
 	r.GET("/contracts/:id", getContract)
 
@@ -212,8 +212,20 @@ func deployContract(c *gin.Context) {
 }
 
 func callContract(c *gin.Context) {
-	// ...existing code...
-	c.JSON(http.StatusOK, gin.H{"message": "Contract called"})
+	id := c.Param("id")
+	method := c.Param("method")
+	addr := c.Request.Header.Get("Address")
+	op := contract.NewContract(Client)
+	resp, err := op.Call(id, method, addr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if balance, ok := resp.(string); ok {
+		c.JSON(http.StatusOK, gin.H{"message": "success", "balance": balance})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"message": "get balance failed."})
+	}
 }
 
 func listContracts(c *gin.Context) {

@@ -2,11 +2,13 @@ package contract
 
 import (
 	"context"
+	"errors"
 	"web3/gin/blockchain"
 	"web3/gin/contract/backend"
 	"web3/gin/contract/mytoken"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -35,4 +37,33 @@ func (c *contract) DeployContract() (string, string, error) {
 	// TODO: 部署合约
 	contractAddress, txHash, _, err := mytoken.DeployMytoken(txOpts, *bk)
 	return contractAddress.Hex(), txHash.Hash().Hex(), err
+}
+
+func (c *contract) Call(addr string, category string, params interface{}) (interface{}, error) {
+	var resp interface{}
+	var err error
+
+	instance, err := mytoken.NewMytoken(common.HexToAddress(addr), c.client.Eth)
+	if err != nil {
+		return nil, err
+	}
+	callOpts := &bind.CallOpts{
+		Pending: false,
+		Context: context.Background(),
+	}
+	switch category {
+	case "BalanceOf":
+		if addr, ok := params.(string); ok {
+			bBlance, err := instance.BalanceOf(callOpts, common.HexToAddress(addr))
+			if err != nil {
+				return nil, err
+			}
+			resp = bBlance.String()
+		} else {
+			err = errors.New("invalid params")
+		}
+	default:
+		return nil, errors.New("unsupported category")
+	}
+	return resp, err
 }
