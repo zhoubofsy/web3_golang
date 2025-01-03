@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"math"
 	"math/big"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"web3/gin/contract"
 	trans "web3/gin/transaction"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -214,17 +217,39 @@ func deployContract(c *gin.Context) {
 func callContract(c *gin.Context) {
 	id := c.Param("id")
 	method := c.Param("method")
-	addr := c.Request.Header.Get("Address")
+	var params interface{}
+	switch method {
+	case "BalanceOf":
+		params = c.Request.Header.Get("Address")
+	case "Transfer":
+		jsonParams := contract.TransactParams{}
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid body"})
+			return
+		}
+		if nil != json.Unmarshal(body, &jsonParams) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid body"})
+			return
+		}
+		params = jsonParams
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid method"})
+		return
+	}
+
 	op := contract.NewContract(Client)
-	resp, err := op.Call(id, method, addr)
+	resp, err := op.Call(id, method, params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if balance, ok := resp.(string); ok {
 		c.JSON(http.StatusOK, gin.H{"message": "success", "balance": balance})
+	} else if txHash, ok := resp.(*types.Transaction); ok {
+		c.JSON(http.StatusOK, gin.H{"message": "success", "txHash": txHash.Hash().Hex()})
 	} else {
-		c.JSON(http.StatusOK, gin.H{"message": "get balance failed."})
+		c.JSON(http.StatusOK, gin.H{"message": "unknow resp."})
 	}
 }
 
