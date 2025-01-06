@@ -12,6 +12,7 @@ import (
 	"web3/gin/block"
 	"web3/gin/blockchain"
 	"web3/gin/contract"
+	"web3/gin/event"
 	trans "web3/gin/transaction"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -19,9 +20,15 @@ import (
 )
 
 var Client *blockchain.Client
+var WSClient *event.ContractEvent
 
 func main() {
 	Client = blockchain.NewClient("ethereum", "http://localhost:8545")
+	WSClient := event.NewEvent("ws://127.0.0.1:8545")
+	if WSClient == nil {
+		panic("Failed to create event")
+	}
+	go WSClient.Run("0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0")
 
 	r := gin.Default()
 
@@ -265,8 +272,14 @@ func getContract(c *gin.Context) {
 
 // Event handlers
 func listEvents(c *gin.Context) {
-	// ...existing code...
-	c.JSON(http.StatusOK, gin.H{"events": []string{}})
+	cEventLog := event.NewEvent("ws://127.0.0.1:8545")
+	cAddr := c.Query("contractAddr")
+	logs, err := cEventLog.ListWithBlkId(cAddr, 0, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"events": logs})
 }
 
 func getEvent(c *gin.Context) {
