@@ -13,8 +13,10 @@ import (
 	"web3/gin/blockchain"
 	"web3/gin/contract"
 	"web3/gin/event"
+	"web3/gin/signature"
 	trans "web3/gin/transaction"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/gin-gonic/gin"
 )
@@ -60,7 +62,56 @@ func main() {
 	r.GET("/events/:id", getEvent)
 	r.GET("/events/listen", listenEvents)
 
+	// Signature routes
+	r.POST("/sign/:method", sign)
+
 	r.Run(":8080")
+}
+
+// Signature handlers
+func sign(c *gin.Context) {
+	method := c.Param("method")
+	privateKey := c.Request.Header.Get("privateKey")
+	op := signature.NewSigner(privateKey)
+	if op == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create signer"})
+		return
+	}
+	switch method {
+	case "make":
+		byteBody, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+			return
+		}
+		sig, err := op.MakeSignature(byteBody)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"signatureHex": hexutil.Encode(sig)})
+	case "verify":
+		sig := c.Query("sig")
+		byteBody, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+			return
+		}
+
+		byteSig, err := hexutil.Decode(sig)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decode signature"})
+			return
+		}
+		if op.VerfiySignature(byteBody, byteSig) {
+			c.JSON(http.StatusOK, gin.H{"result": "Signature verified"})
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid signature"})
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid method"})
+	}
 }
 
 // Account handlers
