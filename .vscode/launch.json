@@ -5,7 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch Package",
+            "name": "node Launch Program",
+            "program": "${fileDirname}",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "type": "node"
+        },
+        {
+            "name": "go Launch Package",
             "type": "go",
             "request": "launch",
             "mode": "auto",
